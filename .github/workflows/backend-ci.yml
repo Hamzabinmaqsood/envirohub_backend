@@ -1,0 +1,42 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare environment
+        run: cp .env.example .env
+
+      - name: Build Django image
+        run: docker compose build web
+
+      - name: Start PostGIS
+        run: docker compose up -d db
+
+      - name: Django system check
+        run: docker compose run --rm web python manage.py check
+
+      - name: Check migrations are committed
+        run: docker compose run --rm web python manage.py makemigrations --check --dry-run
+
+      - name: Run backend tests
+        run: docker compose run --rm web python manage.py test apps.reports --verbosity 2
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

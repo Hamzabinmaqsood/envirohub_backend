@@ -1,5 +1,3 @@
-import json
-
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.core.paginator import Paginator
@@ -176,11 +174,21 @@ def workers_list(request):
 def report_map(request):
     reports = Report.objects.select_related("category", "assigned_worker").exclude(location__isnull=True)
     status = request.GET.get("status", "").strip()
+    category = request.GET.get("category", "").strip()
+    worker = request.GET.get("worker", "").strip()
+
     if status:
         reports = reports.filter(status=status)
+    if category:
+        reports = reports.filter(category_id=category)
+    if worker:
+        reports = reports.filter(assigned_worker_id=worker)
 
     points = []
     for report in reports[:500]:
+        worker_name = ""
+        if report.assigned_worker:
+            worker_name = report.assigned_worker.get_full_name().strip() or report.assigned_worker.email
         points.append(
             {
                 "id": str(report.id),
@@ -188,12 +196,24 @@ def report_map(request):
                 "lng": report.location.x,
                 "status": report.status,
                 "category": report.category.name,
+                "address": report.address,
+                "worker": worker_name,
                 "description": report.description[:140],
+                "created_at": report.created_at.isoformat(),
                 "url": f"/authority/reports/{report.id}/",
             }
         )
+
     return render(
         request,
         "dashboard/map.html",
-        {"points_json": json.dumps(points), "statuses": Report.Status.choices, "selected_status": status},
+        {
+            "points": points,
+            "statuses": Report.Status.choices,
+            "categories": Category.objects.filter(is_active=True).order_by("sort_order", "name"),
+            "workers": User.objects.filter(role=User.Role.WORKER, is_active=True).order_by("email"),
+            "selected_status": status,
+            "selected_category": category,
+            "selected_worker": worker,
+        },
     )

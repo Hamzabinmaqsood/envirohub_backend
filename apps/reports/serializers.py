@@ -87,6 +87,28 @@ class ReportListSerializer(serializers.ModelSerializer):
         return request.build_absolute_uri(url) if request else url
 
 
+class NearbyReportQuerySerializer(serializers.Serializer):
+    latitude = serializers.FloatField(min_value=-90, max_value=90)
+    longitude = serializers.FloatField(min_value=-180, max_value=180)
+    radius_m = serializers.IntegerField(min_value=50, max_value=2000, default=200, required=False)
+    category = serializers.SlugField(required=False, allow_blank=True)
+
+
+class NearbyReportSerializer(serializers.ModelSerializer):
+    category = CategorySerializer(read_only=True)
+    distance_m = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Report
+        fields = ("id", "category", "status", "distance_m", "created_at")
+
+    def get_distance_m(self, obj):
+        distance = getattr(obj, "distance", None)
+        if distance is None:
+            return None
+        return round(distance.m)
+
+
 class ReportDetailSerializer(ReportListSerializer):
     images = ReportImageSerializer(many=True, read_only=True)
     timeline = StatusHistorySerializer(source="status_history", many=True, read_only=True)

@@ -1,3 +1,6 @@
+from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.geos import Point
+from django.contrib.gis.measure import D
 from django.db.models import Prefetch
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import generics, mixins, viewsets
@@ -12,6 +15,8 @@ from .serializers import (
     AssignWorkerSerializer,
     AuthorityReportDetailSerializer,
     CategorySerializer,
+    NearbyReportQuerySerializer,
+    NearbyReportSerializer,
     ReportCreateSerializer,
     ReportDetailSerializer,
     ReportListSerializer,
@@ -69,6 +74,35 @@ class ReportViewSet(
         if self.action == "retrieve":
             return ReportDetailSerializer
         return ReportListSerializer
+
+
+    @extend_schema(
+        tags=["Citizen Reports"],
+        parameters=[NearbyReportQuerySerializer],
+        responses=NearbyReportSerializer(many=True),
+    )
+    @action(detail=False, methods=["get"], url_path="nearby")
+    def nearby(self, request):
+        query = NearbyReportQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        latitude = query.validated_data["latitude"]
+        longitude = query.validated_data["longitude"]
+        radius_m = query.validated_data.get("radius_m", 200)
+        category_slug = query.validated_data.get("category", "")
+
+        origin = Point(longitude, latitude, srid=4326)
+        nearby_reports = (
+            report_queryset()
+            .exclude(status__in=[Report.Status.RESOLVED, Report.Status.REJECTED])
+            .filter(location__distance_lte=(origin, D(m=radius_m)))
+            .annotate(distance=Distance("location", origin))
+            .order_by("distance", "-created_at")
+        )
+        if category_slug:
+            nearby_reports = nearby_reports.filter(category__slug=category_slug)
+
+        serializer = NearbyReportSerializer(nearby_reports[:10], many=True)
+        return Response(serializer.data)
 
     @extend_schema(tags=["Citizen Reports"], responses=StatusHistorySerializer(many=True))
     @action(detail=True, methods=["get"], url_path="timeline")

@@ -1,1 +1,75 @@
-{% extends 'dashboard/base.html' %}{% block title %}Live Map · EnviroHub{% endblock %}{% block head %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><style>#map{height:72vh;border-radius:16px;border:1px solid #e2e8e5;background:#e8efec}</style>{% endblock %}{% block content %}<div class="topbar"><div><h1>Report map</h1><div class="muted">Geographic view of submitted environmental issues</div></div><form method="get"><select name="status" onchange="this.form.submit()"><option value="">All statuses</option>{% for value,label in statuses %}<option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></form></div><div id="map"></div><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script>const points={{ points_json|safe }};const map=L.map('map').setView(points.length?[points[0].lat,points[0].lng]:[30.3753,69.3451],points.length?11:5);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);const bounds=[];for(const p of points){const marker=L.marker([p.lat,p.lng]).addTo(map);marker.bindPopup(`<b>${p.category}</b><br>${p.status}<br>${p.description}<br><a href="${p.url}">Open report</a>`);bounds.push([p.lat,p.lng]);}if(bounds.length>1)map.fitBounds(bounds,{padding:[30,30]});</script>{% endblock %}
+{% extends 'dashboard/base.html' %}
+{% block title %}Live Map · EnviroHub{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  #map{height:68vh;min-height:520px;border-radius:16px;border:1px solid #e2e8e5;background:#e8efec}
+  .map-toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .map-toolbar select{min-width:170px}
+  .map-legend{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 16px}
+  .legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+  .legend-dot{width:10px;height:10px;border-radius:50%}
+  .map-summary{font-size:13px;color:var(--muted)}
+  .leaflet-popup-content{min-width:220px;line-height:1.45}
+  .popup-status{font-weight:700;margin:4px 0}
+  .popup-muted{color:#68746f;font-size:12px}
+</style>
+{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div><h1>Live report map</h1><div class="muted">Geographic workload, assignment and status monitoring</div></div>
+  <div class="map-summary">{{ points|length }} report{{ points|length|pluralize }} shown</div>
+</div>
+<form class="map-toolbar" method="get">
+  <select name="status">
+    <option value="">All statuses</option>
+    {% for value,label in statuses %}<option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <select name="category">
+    <option value="">All categories</option>
+    {% for c in categories %}<option value="{{ c.id }}" {% if selected_category == c.id|stringformat:'s' %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+  </select>
+  <select name="worker">
+    <option value="">All workers</option>
+    {% for w in workers %}<option value="{{ w.id }}" {% if selected_worker == w.id|stringformat:'s' %}selected{% endif %}>{{ w.get_full_name|default:w.email }}</option>{% endfor %}
+  </select>
+  <button class="btn" type="submit">Apply filters</button>
+  <a class="btn secondary" href="{% url 'authority-dashboard:map' %}">Reset</a>
+</form>
+<div class="map-legend">
+  <span class="legend-item"><span class="legend-dot" style="background:#d97706"></span>Submitted</span>
+  <span class="legend-item"><span class="legend-dot" style="background:#2563eb"></span>Verified</span>
+  <span class="legend-item"><span class="legend-dot" style="background:#7c3aed"></span>Assigned</span>
+  <span class="legend-item"><span class="legend-dot" style="background:#0891b2"></span>In progress</span>
+  <span class="legend-item"><span class="legend-dot" style="background:#16a34a"></span>Resolved</span>
+  <span class="legend-item"><span class="legend-dot" style="background:#dc2626"></span>Rejected</span>
+  <span class="legend-item"><span class="legend-dot" style="background:#ea580c"></span>Reopened</span>
+</div>
+<div id="map"></div>
+{{ points|json_script:"report-points" }}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const points = JSON.parse(document.getElementById('report-points').textContent);
+const colors = {
+  SUBMITTED:'#d97706', VERIFIED:'#2563eb', ASSIGNED:'#7c3aed',
+  IN_PROGRESS:'#0891b2', RESOLVED:'#16a34a', REJECTED:'#dc2626', REOPENED:'#ea580c'
+};
+const map = L.map('map').setView(points.length ? [points[0].lat, points[0].lng] : [30.3753, 69.3451], points.length ? 13 : 5);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom:19,
+  attribution:'&copy; OpenStreetMap contributors'
+}).addTo(map);
+const bounds=[];
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+for (const p of points) {
+  const marker = L.circleMarker([p.lat,p.lng], {
+    radius:9, color:'#fff', weight:2, fillColor:colors[p.status] || '#64748b', fillOpacity:0.95
+  }).addTo(map);
+  const location = p.address ? escapeHtml(p.address) : `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`;
+  const worker = p.worker ? `<div class="popup-muted">Worker: ${escapeHtml(p.worker)}</div>` : '<div class="popup-muted">Worker: Not assigned</div>';
+  marker.bindPopup(`<b>${escapeHtml(p.category)}</b><div class="popup-status">${escapeHtml(p.status.replaceAll('_',' '))}</div><div>${escapeHtml(p.description)}</div><div class="popup-muted" style="margin-top:6px">${location}</div>${worker}<div style="margin-top:8px"><a href="${p.url}"><b>Open report →</b></a></div>`);
+  bounds.push([p.lat,p.lng]);
+}
+if (bounds.length > 1) map.fitBounds(bounds,{padding:[30,30],maxZoom:15});
+</script>
+{% endblock %}

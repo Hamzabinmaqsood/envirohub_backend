@@ -9,3 +9,5 @@ staticfiles/
 .idea/
 .vscode/
 .DS_Store
+
+.envirohub_backups/

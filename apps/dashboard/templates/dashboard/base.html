@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}EnviroHub Authority{% endblock %}</title>
+  <style>
+    :root{--green:#116149;--green2:#0d4c3a;--bg:#f5f7f6;--card:#fff;--text:#18221f;--muted:#68746f;--line:#e2e8e5;--danger:#b42318;--amber:#a15c00;--blue:#175cd3}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--text)}
+    a{color:inherit;text-decoration:none}.layout{display:grid;grid-template-columns:235px 1fr;min-height:100vh}.sidebar{background:#0e3f32;color:white;padding:24px 18px;position:sticky;top:0;height:100vh}.brand{font-size:22px;font-weight:800;margin-bottom:28px}.brand small{display:block;font-size:11px;font-weight:500;opacity:.7;letter-spacing:.12em;text-transform:uppercase;margin-top:4px}.nav a{display:block;padding:11px 12px;border-radius:10px;margin:5px 0;color:#e7f3ef}.nav a:hover{background:rgba(255,255,255,.1)}.side-bottom{position:absolute;left:18px;right:18px;bottom:22px;font-size:13px;color:#d8e7e2}.main{padding:28px 32px;min-width:0}.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px}.topbar h1{margin:0;font-size:28px}.muted{color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 1px 2px rgba(0,0,0,.03)}.metric .value{font-size:30px;font-weight:800;margin-top:8px}.metric .label{font-size:13px;color:var(--muted)}.section{margin-top:22px}.section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.section-head h2{margin:0;font-size:18px}.table-wrap{overflow:auto;background:white;border:1px solid var(--line);border-radius:16px}table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:13px 14px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:#fafbfa}tr:last-child td{border-bottom:0}.badge{display:inline-block;padding:4px 9px;border-radius:999px;font-size:12px;font-weight:700;background:#eef2f0}.badge.SUBMITTED{background:#fff1cc;color:#795300}.badge.VERIFIED{background:#eaf2ff;color:#174ea6}.badge.ASSIGNED{background:#eeeaff;color:#5142a6}.badge.IN_PROGRESS{background:#e4f6ff;color:#075985}.badge.RESOLVED{background:#dcfae6;color:#087443}.badge.REJECTED{background:#fee4e2;color:#b42318}.badge.REOPENED{background:#fff3e0;color:#a15c00}.btn{border:0;border-radius:10px;padding:10px 14px;background:var(--green);color:white;font-weight:700;cursor:pointer}.btn.secondary{background:white;color:var(--green);border:1px solid var(--green)}.btn:disabled{opacity:.5;cursor:not-allowed}.filters{display:flex;gap:10px;flex-wrap:wrap;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:14px}.filters input,.filters select,input,select,textarea{border:1px solid #cfd8d4;border-radius:9px;padding:10px;background:white;min-width:150px;font:inherit}.filters .grow{flex:1;min-width:220px}.messages{margin-bottom:16px}.message{padding:11px 13px;border-radius:10px;margin-bottom:8px;background:#eef5f2}.message.error{background:#fee4e2;color:#912018}.message.success{background:#dcfae6;color:#087443}.cols{display:grid;grid-template-columns:1.35fr .65fr;gap:18px}.photo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.photo-grid img{width:100%;border-radius:12px;aspect-ratio:4/3;object-fit:cover;border:1px solid var(--line)}.timeline{border-left:2px solid #d9e5e1;margin-left:8px;padding-left:18px}.timeline-item{position:relative;padding-bottom:18px}.timeline-item:before{content:"";position:absolute;left:-24px;top:4px;width:10px;height:10px;border-radius:50%;background:var(--green)}.form-row{display:grid;gap:10px}.pagination{display:flex;gap:8px;align-items:center;margin-top:14px}.pagination a{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:white}.bars{display:grid;gap:10px}.bar-row{display:grid;grid-template-columns:130px 1fr 36px;gap:10px;align-items:center;font-size:13px}.bar{height:9px;background:#e7eeeb;border-radius:99px;overflow:hidden}.bar span{display:block;height:100%;background:var(--green)}
+    @media(max-width:950px){.layout{grid-template-columns:1fr}.sidebar{height:auto;position:relative}.side-bottom{position:static;margin-top:24px}.main{padding:20px}.grid{grid-template-columns:repeat(2,1fr)}.cols{grid-template-columns:1fr}}
+    @media(max-width:600px){.grid{grid-template-columns:1fr}.photo-grid{grid-template-columns:1fr}.topbar{align-items:flex-start;flex-direction:column}}
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">EnviroHub<small>Authority Portal</small></div>
+    <nav class="nav">
+      <a href="{% url 'authority-dashboard:overview' %}">Overview</a>
+      <a href="{% url 'authority-dashboard:reports' %}">Reports</a>
+      <a href="{% url 'authority-dashboard:map' %}">Live Map</a>
+      <a href="{% url 'authority-dashboard:workers' %}">Workers</a>
+      <a href="/admin/">Django Admin</a>
+      <a href="/api/docs/">API Docs</a>
+    </nav>
+    <div class="side-bottom">
+      {{ request.user.email }}
+      <form method="post" action="{% url 'authority-dashboard:logout' %}" style="margin-top:10px">{% csrf_token %}<button class="btn secondary" type="submit">Log out</button></form>
+    </div>
+  </aside>
+  <main class="main">
+    {% if messages %}<div class="messages">{% for message in messages %}<div class="message {{ message.tags }}">{{ message }}</div>{% endfor %}</div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+</body>
+</html>

@@ -121,3 +121,7 @@ SPECTACULAR_SETTINGS = {
 # Keep request body sizes conservative; production reverse proxy should also enforce limits.
 DATA_UPLOAD_MAX_MEMORY_SIZE = 15 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+
+
+FIREBASE_PUSH_ENABLED = os.getenv("FIREBASE_PUSH_ENABLED", "False").lower() == "true"
+FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "" )

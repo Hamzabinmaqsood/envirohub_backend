@@ -5,6 +5,7 @@ from rest_framework import serializers
 
 from apps.accounts.models import User
 from apps.notifications.models import Notification
+from apps.notifications.services import create_notification
 
 from .models import Category, Report, ReportImage, ReportStatusHistory
 from .validators import validate_report_image
@@ -171,7 +172,7 @@ class ReportCreateSerializer(serializers.ModelSerializer):
             changed_by=request.user,
             note="Report submitted by citizen.",
         )
-        Notification.objects.create(
+        create_notification(
             user=request.user,
             title="Report submitted",
             message="Your environmental report has been submitted successfully.",

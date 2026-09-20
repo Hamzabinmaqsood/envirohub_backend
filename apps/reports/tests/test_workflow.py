@@ -112,6 +112,14 @@ class ReportWorkflowTests(TestCase):
                 "Report resolved",
             ],
         )
+        self.assertEqual(
+            list(
+                Notification.objects.filter(user=self.worker)
+                .order_by("created_at")
+                .values_list("title", flat=True)
+            ),
+            ["New job assigned"],
+        )
 
     def test_unassigned_worker_cannot_start_report(self):
         self.report.status = Report.Status.ASSIGNED

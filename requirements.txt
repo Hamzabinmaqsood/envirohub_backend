@@ -6,3 +6,5 @@ drf-spectacular==0.30.0
 psycopg[binary]>=3.2,<4
 Pillow>=11.0,<13
 gunicorn>=23,<24
+
+firebase-admin==7.6.0

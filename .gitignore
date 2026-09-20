@@ -11,3 +11,7 @@ staticfiles/
 .DS_Store
 
 .envirohub_backups/
+
+secrets/
+
+docker-compose.override.yml

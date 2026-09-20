@@ -4,6 +4,7 @@ from rest_framework import serializers
 
 from apps.accounts.models import User
 from apps.notifications.models import Notification
+from apps.notifications.services import create_notification
 
 from .models import Report, ReportImage, ReportStatusHistory
 
@@ -34,7 +35,7 @@ class ReportWorkflow:
 
     @staticmethod
     def _notify(report, title, message):
-        Notification.objects.create(
+        create_notification(
             user=report.citizen,
             title=title,
             message=message,
@@ -86,6 +87,13 @@ class ReportWorkflow:
             report,
             "Worker assigned",
             "A field worker has been assigned to your environmental report.",
+        )
+        create_notification(
+            user=worker,
+            title="New job assigned",
+            message=f"A {report.category.name} report has been assigned to you.",
+            notification_type=Notification.Type.REPORT_STATUS,
+            report=report,
         )
         return report
 

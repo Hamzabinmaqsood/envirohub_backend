@@ -110,6 +110,36 @@ class NearbyReportSerializer(serializers.ModelSerializer):
         return round(distance.m)
 
 
+
+
+class CommunityNearbyReportSerializer(NearbyReportSerializer):
+    confirmation_count = serializers.IntegerField(read_only=True)
+    follower_count = serializers.IntegerField(read_only=True)
+    is_confirmed = serializers.BooleanField(read_only=True)
+    is_following = serializers.BooleanField(read_only=True)
+
+    class Meta(NearbyReportSerializer.Meta):
+        fields = NearbyReportSerializer.Meta.fields + (
+            "confirmation_count", "follower_count", "is_confirmed", "is_following",
+        )
+
+
+class CommunityReportSerializer(ReportListSerializer):
+    """Safe citizen-facing shared view: no reporter identity or internal history notes."""
+
+    images = ReportImageSerializer(many=True, read_only=True)
+    confirmation_count = serializers.IntegerField(read_only=True)
+    follower_count = serializers.IntegerField(read_only=True)
+    is_confirmed = serializers.BooleanField(read_only=True)
+    is_following = serializers.BooleanField(read_only=True)
+
+    class Meta(ReportListSerializer.Meta):
+        fields = ReportListSerializer.Meta.fields + (
+            "images", "confirmation_count", "follower_count",
+            "is_confirmed", "is_following",
+        )
+
+
 class ReportDetailSerializer(ReportListSerializer):
     images = ReportImageSerializer(many=True, read_only=True)
     timeline = StatusHistorySerializer(source="status_history", many=True, read_only=True)
@@ -119,6 +149,20 @@ class ReportDetailSerializer(ReportListSerializer):
         fields = ReportListSerializer.Meta.fields + (
             "images", "timeline", "assigned_worker",
             "verified_at", "assigned_at", "started_at", "resolved_at",
+        )
+
+
+class OwnCommunityReportSerializer(ReportDetailSerializer):
+    """Keep every existing owner-detail field, adding personal engagement state."""
+
+    confirmation_count = serializers.IntegerField(read_only=True)
+    follower_count = serializers.IntegerField(read_only=True)
+    is_confirmed = serializers.BooleanField(read_only=True)
+    is_following = serializers.BooleanField(read_only=True)
+
+    class Meta(ReportDetailSerializer.Meta):
+        fields = ReportDetailSerializer.Meta.fields + (
+            "confirmation_count", "follower_count", "is_confirmed", "is_following",
         )
 
 

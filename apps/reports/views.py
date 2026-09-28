@@ -1,7 +1,9 @@
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
-from django.db.models import Prefetch
+from django.db import transaction
+from django.db.models import Count, Exists, OuterRef, Prefetch, Q
+from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import generics, mixins, viewsets
 from rest_framework.decorators import action
@@ -10,15 +12,16 @@ from rest_framework.response import Response
 from apps.accounts.models import User
 from apps.accounts.permissions import IsAuthority, IsCitizen, IsWorker
 
-from .models import Category, Report, ReportImage
+from .models import Category, Report, ReportImage, ReportConfirmation, ReportFollow
 from .serializers import (
     AssignWorkerSerializer,
     AuthorityReportDetailSerializer,
     CategorySerializer,
+    CommunityNearbyReportSerializer,
+    CommunityReportSerializer,
     NearbyReportQuerySerializer,
-    NearbyReportSerializer,
     ReportCreateSerializer,
-    ReportDetailSerializer,
+    OwnCommunityReportSerializer,
     ReportListSerializer,
     ResolveReportSerializer,
     StatusHistorySerializer,
@@ -37,6 +40,22 @@ def report_queryset():
             Prefetch("images", queryset=ReportImage.objects.order_by("created_at")),
             "status_history__changed_by",
         )
+    )
+
+
+def community_queryset(user):
+    """Count distinct users, plus this citizen's independent engagement states."""
+    from .models import ReportConfirmation, ReportFollow
+
+    return report_queryset().annotate(
+        confirmation_count=Count("confirmations", distinct=True),
+        follower_count=Count("followers", distinct=True),
+        is_confirmed=Exists(
+            ReportConfirmation.objects.filter(report_id=OuterRef("pk"), user=user)
+        ),
+        is_following=Exists(
+            ReportFollow.objects.filter(report_id=OuterRef("pk"), user=user)
+        ),
     )
 
 
@@ -66,20 +85,92 @@ class ReportViewSet(
     ordering = ("-created_at",)
 
     def get_queryset(self):
-        return report_queryset().filter(citizen=self.request.user)
+        return community_queryset(self.request.user).filter(citizen=self.request.user)
 
     def get_serializer_class(self):
         if self.action == "create":
             return ReportCreateSerializer
         if self.action == "retrieve":
-            return ReportDetailSerializer
+            return OwnCommunityReportSerializer
         return ReportListSerializer
 
+
+    def _community_report(self):
+        """Shared report access without broadening the private /reports/{id}/ endpoint."""
+        qs = community_queryset(self.request.user).filter(
+            Q(citizen=self.request.user) | ~Q(status=Report.Status.REJECTED)
+        )
+        report = get_object_or_404(qs, pk=self.kwargs["pk"])
+        self.check_object_permissions(self.request, report)
+        return report
+
+    def _community_response(self, report_id):
+        report = community_queryset(self.request.user).get(pk=report_id)
+        return Response(CommunityReportSerializer(report, context=self.get_serializer_context()).data)
+
+    @extend_schema(tags=["Community"], responses=CommunityReportSerializer)
+    @action(detail=True, methods=["get"], url_path="community")
+    def community(self, request, pk=None):
+        return Response(
+            CommunityReportSerializer(
+                self._community_report(), context=self.get_serializer_context()
+            ).data
+        )
+
+    @extend_schema(tags=["Community"], request=None, responses=CommunityReportSerializer)
+    @action(detail=True, methods=["post", "delete"], url_path="confirm")
+    def confirm(self, request, pk=None):
+        report = self._community_report()
+        if report.citizen_id == request.user.id:
+            return Response({"detail": "You cannot confirm your own report."}, status=400)
+        if request.method == "POST":
+            with transaction.atomic():
+                # Lock only the Report row, not nullable worker/verification joins.
+                locked = Report.objects.select_for_update().get(pk=report.pk)
+                if locked.status in (Report.Status.RESOLVED, Report.Status.REJECTED):
+                    return Response({"detail": "This report is closed to new confirmations."}, status=400)
+                ReportConfirmation.objects.get_or_create(report=locked, user=request.user)
+        else:
+            ReportConfirmation.objects.filter(report=report, user=request.user).delete()
+        return self._community_response(report.pk)
+
+    @extend_schema(tags=["Community"], request=None, responses=CommunityReportSerializer)
+    @action(detail=True, methods=["post", "delete"], url_path="follow")
+    def follow(self, request, pk=None):
+        report = self._community_report()
+        if report.citizen_id == request.user.id:
+            return Response({"detail": "Your own report already sends you updates."}, status=400)
+        if request.method == "POST":
+            with transaction.atomic():
+                # Lock only the Report row, not nullable worker/verification joins.
+                locked = Report.objects.select_for_update().get(pk=report.pk)
+                if locked.status in (Report.Status.RESOLVED, Report.Status.REJECTED):
+                    return Response({"detail": "This report is closed to new followers."}, status=400)
+                ReportFollow.objects.get_or_create(report=locked, user=request.user)
+        else:
+            ReportFollow.objects.filter(report=report, user=request.user).delete()
+        return self._community_response(report.pk)
+
+    @extend_schema(tags=["Community"], responses=CommunityReportSerializer(many=True))
+    @action(detail=False, methods=["get"], url_path="following")
+    def following(self, request):
+        qs = community_queryset(request.user).filter(
+            is_following=True
+        ).exclude(status=Report.Status.REJECTED).order_by("-created_at")
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = CommunityReportSerializer(
+                page, many=True, context=self.get_serializer_context()
+            )
+            return self.get_paginated_response(serializer.data)
+        return Response(
+            CommunityReportSerializer(qs, many=True, context=self.get_serializer_context()).data
+        )
 
     @extend_schema(
         tags=["Citizen Reports"],
         parameters=[NearbyReportQuerySerializer],
-        responses=NearbyReportSerializer(many=True),
+        responses=CommunityNearbyReportSerializer(many=True),
     )
     @action(detail=False, methods=["get"], url_path="nearby")
     def nearby(self, request):
@@ -92,7 +183,7 @@ class ReportViewSet(
 
         origin = Point(longitude, latitude, srid=4326)
         nearby_reports = (
-            report_queryset()
+            community_queryset(request.user)
             .exclude(status__in=[Report.Status.RESOLVED, Report.Status.REJECTED])
             .filter(location__distance_lte=(origin, D(m=radius_m)))
             .annotate(distance=Distance("location", origin))
@@ -101,7 +192,7 @@ class ReportViewSet(
         if category_slug:
             nearby_reports = nearby_reports.filter(category__slug=category_slug)
 
-        serializer = NearbyReportSerializer(nearby_reports[:10], many=True)
+        serializer = CommunityNearbyReportSerializer(nearby_reports[:10], many=True)
         return Response(serializer.data)
 
     @extend_schema(tags=["Citizen Reports"], responses=StatusHistorySerializer(many=True))

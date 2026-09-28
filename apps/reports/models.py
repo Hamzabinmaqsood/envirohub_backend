@@ -101,3 +101,37 @@ class ReportStatusHistory(models.Model):
 
     class Meta:
         ordering = ("created_at",)
+
+
+
+class ReportConfirmation(models.Model):
+    """One independent community observation per citizen per report."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    report = models.ForeignKey(Report, on_delete=models.CASCADE, related_name="confirmations")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="report_confirmations"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=("report", "user"), name="reports_confirm_once")
+        ]
+
+
+class ReportFollow(models.Model):
+    """A status-update subscription, independent of confirmation."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    report = models.ForeignKey(Report, on_delete=models.CASCADE, related_name="followers")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="followed_reports"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=("report", "user"), name="reports_follow_once")
+        ]
+        indexes = [models.Index(fields=("user", "report"), name="reports_follow_user_idx")]

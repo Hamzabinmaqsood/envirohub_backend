@@ -55,7 +55,7 @@ const colors = {
   IN_PROGRESS:'#0891b2', RESOLVED:'#16a34a', REJECTED:'#dc2626', REOPENED:'#ea580c'
 };
 const map = L.map('map').setView(points.length ? [points[0].lat, points[0].lng] : [30.3753, 69.3451], points.length ? 13 : 5);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom:19,
   attribution:'&copy; OpenStreetMap contributors'
 }).addTo(map);

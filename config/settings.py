@@ -38,6 +38,11 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "config.urls"
 
+# OpenStreetMap web tiles require a cross-origin Referer. Django defaults
+# SECURE_REFERRER_POLICY to "same-origin", which strips it for OSM tile requests.
+# This sends only the origin to cross-origin services while keeping full URLs same-origin.
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",

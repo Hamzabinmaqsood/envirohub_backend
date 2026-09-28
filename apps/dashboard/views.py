@@ -57,7 +57,8 @@ def overview(request):
         .annotate(
             confirmation_count=Count("confirmations", distinct=True),
             follower_count=Count("followers", distinct=True),
-        )[:8]
+        )
+        .order_by("-created_at", "-id")[:8]
     )
     context = {
         "total_reports": reports.count(),
@@ -82,6 +83,7 @@ def reports_list(request):
             confirmation_count=Count("confirmations", distinct=True),
             follower_count=Count("followers", distinct=True),
         )
+        .order_by("-created_at", "-id")
     )
     status = request.GET.get("status", "").strip()
     category = request.GET.get("category", "").strip()
@@ -190,7 +192,11 @@ def workers_list(request):
 
 @authority_required
 def report_map(request):
-    reports = Report.objects.select_related("category", "assigned_worker").exclude(location__isnull=True)
+    reports = (
+        Report.objects.select_related("category", "assigned_worker")
+        .exclude(location__isnull=True)
+        .order_by("-created_at", "-id")
+    )
     status = request.GET.get("status", "").strip()
     category = request.GET.get("category", "").strip()
     worker = request.GET.get("worker", "").strip()

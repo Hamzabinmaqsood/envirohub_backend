@@ -6,7 +6,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 
 from apps.accounts.models import User
-from apps.reports.models import Category, Report
+from apps.reports.models import Category, Report, ReportConfirmation, ReportFollow
 from apps.reports.services import ReportWorkflow
 
 from .decorators import authority_required
@@ -52,13 +52,21 @@ def overview(request):
         .filter(report_count__gt=0)
         .order_by("-report_count", "name")[:8]
     )
-    recent_reports = reports.select_related("citizen", "category", "assigned_worker")[:8]
+    recent_reports = (
+        reports.select_related("citizen", "category", "assigned_worker")
+        .annotate(
+            confirmation_count=Count("confirmations", distinct=True),
+            follower_count=Count("followers", distinct=True),
+        )[:8]
+    )
     context = {
         "total_reports": reports.count(),
         "open_reports": reports.exclude(status__in=[Report.Status.RESOLVED, Report.Status.REJECTED]).count(),
         "resolved_reports": status_counts.get(Report.Status.RESOLVED, 0),
         "active_workers": User.objects.filter(role=User.Role.WORKER, is_active=True).count(),
         "citizens": User.objects.filter(role=User.Role.CITIZEN, is_active=True).count(),
+        "community_confirmations": ReportConfirmation.objects.count(),
+        "active_follows": ReportFollow.objects.count(),
         "status_counts": status_counts,
         "category_counts": category_counts,
         "recent_reports": recent_reports,
@@ -68,7 +76,13 @@ def overview(request):
 
 @authority_required
 def reports_list(request):
-    qs = Report.objects.select_related("citizen", "category", "assigned_worker")
+    qs = (
+        Report.objects.select_related("citizen", "category", "assigned_worker")
+        .annotate(
+            confirmation_count=Count("confirmations", distinct=True),
+            follower_count=Count("followers", distinct=True),
+        )
+    )
     status = request.GET.get("status", "").strip()
     category = request.GET.get("category", "").strip()
     worker = request.GET.get("worker", "").strip()
@@ -105,6 +119,10 @@ def reports_list(request):
 def report_detail(request, report_id):
     report = get_object_or_404(
         Report.objects.select_related("citizen", "category", "assigned_worker", "verified_by")
+        .annotate(
+            confirmation_count=Count("confirmations", distinct=True),
+            follower_count=Count("followers", distinct=True),
+        )
         .prefetch_related("images", "status_history__changed_by"),
         pk=report_id,
     )

@@ -5,10 +5,31 @@ from .models import DeviceInstallation, Notification
 
 class NotificationSerializer(serializers.ModelSerializer):
     report_id = serializers.UUIDField(source="report.id", read_only=True, allow_null=True)
+    is_community_report = serializers.SerializerMethodField()
+
+    def get_is_community_report(self, obj):
+        """Tell the Citizen app which safe report-detail route this alert should open."""
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not obj.report_id or not getattr(user, "is_authenticated", False):
+            return False
+        return (
+            getattr(user, "role", None) == "CITIZEN"
+            and obj.report.citizen_id != user.id
+        )
 
     class Meta:
         model = Notification
-        fields = ("id", "title", "message", "notification_type", "report_id", "is_read", "created_at")
+        fields = (
+            "id",
+            "title",
+            "message",
+            "notification_type",
+            "report_id",
+            "is_community_report",
+            "is_read",
+            "created_at",
+        )
 
 
 class DeviceInstallationSerializer(serializers.ModelSerializer):

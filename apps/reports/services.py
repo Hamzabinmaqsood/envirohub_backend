@@ -34,14 +34,37 @@ class ReportWorkflow:
         )
 
     @staticmethod
-    def _notify(report, title, message):
+    def _notify(report, title, owner_message, follower_message):
+        """Notify the reporter plus every active citizen currently following the report.
+
+        The reporter is explicitly excluded from the follower audience so a legacy
+        owner-follow row can never create a duplicate notification.
+        """
         create_notification(
             user=report.citizen,
             title=title,
-            message=message,
+            message=owner_message,
             notification_type=Notification.Type.REPORT_STATUS,
             report=report,
         )
+
+        followers = (
+            User.objects.filter(
+                role=User.Role.CITIZEN,
+                is_active=True,
+                followed_reports__report=report,
+            )
+            .exclude(pk=report.citizen_id)
+            .distinct()
+        )
+        for follower in followers:
+            create_notification(
+                user=follower,
+                title=title,
+                message=follower_message,
+                notification_type=Notification.Type.REPORT_STATUS,
+                report=report,
+            )
 
     @classmethod
     @transaction.atomic
@@ -62,6 +85,7 @@ class ReportWorkflow:
             report,
             "Report verified",
             "Your environmental report has been verified by the responsible authority.",
+            "A report you follow has been verified by the responsible authority.",
         )
         return report
 
@@ -87,6 +111,7 @@ class ReportWorkflow:
             report,
             "Worker assigned",
             "A field worker has been assigned to your environmental report.",
+            "A field worker has been assigned to a report you follow.",
         )
         create_notification(
             user=worker,
@@ -117,6 +142,7 @@ class ReportWorkflow:
             report,
             "Work started",
             "Work has started on your environmental report.",
+            "Work has started on a report you follow.",
         )
         return report
 
@@ -150,5 +176,6 @@ class ReportWorkflow:
             report,
             "Report resolved",
             "Your environmental report has been marked resolved. Resolution photos are now available.",
+            "A report you follow has been marked resolved. Resolution photos are now available.",
         )
         return report

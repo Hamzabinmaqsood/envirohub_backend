@@ -5,7 +5,7 @@ from rest_framework import serializers
 
 from apps.accounts.models import User
 from apps.notifications.models import Notification
-from apps.reports.models import Category, Report, ReportImage, ReportStatusHistory
+from apps.reports.models import Category, Report, ReportFollow, ReportImage, ReportStatusHistory
 from apps.reports.services import ReportWorkflow
 
 
@@ -40,6 +40,17 @@ class ReportWorkflowTests(TestCase):
             email="other-worker@example.com",
             password="TestPass123!",
             role=User.Role.WORKER,
+        )
+        self.follower = User.objects.create_user(
+            email="follower@example.com",
+            password="TestPass123!",
+            first_name="Follower",
+            role=User.Role.CITIZEN,
+        )
+        self.former_follower = User.objects.create_user(
+            email="former-follower@example.com",
+            password="TestPass123!",
+            role=User.Role.CITIZEN,
         )
         self.category = Category.objects.create(
             name="Garbage",
@@ -142,3 +153,80 @@ class ReportWorkflowTests(TestCase):
 
         self.report.refresh_from_db()
         self.assertEqual(self.report.status, Report.Status.SUBMITTED)
+
+    def test_current_followers_receive_each_status_notification(self):
+        ReportFollow.objects.create(report=self.report, user=self.follower)
+
+        ReportWorkflow.verify(self.report.id, self.authority)
+        ReportWorkflow.assign(self.report.id, self.authority, self.worker)
+        ReportWorkflow.start(self.report.id, self.worker)
+
+        after_photo = SimpleUploadedFile(
+            "after-follower.gif",
+            _ONE_PIXEL_GIF,
+            content_type="image/gif",
+        )
+        ReportWorkflow.resolve(self.report.id, self.worker, [after_photo])
+
+        self.assertEqual(
+            list(
+                Notification.objects.filter(user=self.follower)
+                .order_by("created_at")
+                .values_list("title", flat=True)
+            ),
+            [
+                "Report verified",
+                "Worker assigned",
+                "Work started",
+                "Report resolved",
+            ],
+        )
+        self.assertTrue(
+            Notification.objects.filter(
+                user=self.follower,
+                message__icontains="report you follow",
+            ).exists()
+        )
+
+    def test_unfollow_stops_future_status_notifications(self):
+        ReportFollow.objects.create(report=self.report, user=self.former_follower)
+
+        ReportWorkflow.verify(self.report.id, self.authority)
+        ReportFollow.objects.filter(
+            report=self.report,
+            user=self.former_follower,
+        ).delete()
+        ReportWorkflow.assign(self.report.id, self.authority, self.worker)
+        ReportWorkflow.start(self.report.id, self.worker)
+
+        after_photo = SimpleUploadedFile(
+            "after-unfollow.gif",
+            _ONE_PIXEL_GIF,
+            content_type="image/gif",
+        )
+        ReportWorkflow.resolve(self.report.id, self.worker, [after_photo])
+
+        self.assertEqual(
+            list(
+                Notification.objects.filter(user=self.former_follower)
+                .order_by("created_at")
+                .values_list("title", flat=True)
+            ),
+            ["Report verified"],
+        )
+
+    def test_reporter_never_gets_duplicate_notification_from_legacy_follow(self):
+        # The API prevents this state, but the workflow still defensively de-duplicates it.
+        ReportFollow.objects.create(report=self.report, user=self.citizen)
+
+        ReportWorkflow.verify(self.report.id, self.authority)
+
+        self.assertEqual(
+            Notification.objects.filter(
+                user=self.citizen,
+                report=self.report,
+                title="Report verified",
+            ).count(),
+            1,
+        )
+

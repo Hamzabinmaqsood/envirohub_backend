@@ -1,11 +1,13 @@
 from unittest.mock import patch
 
+from django.contrib.gis.geos import Point
 from django.test import TestCase
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
 from apps.notifications.models import DeviceInstallation, Notification
 from apps.notifications.services import create_notification, send_push_notification
+from apps.reports.models import Category, Report, ReportFollow
 
 
 class DeviceInstallationApiTests(TestCase):
@@ -132,3 +134,65 @@ class DeviceInstallationApiTests(TestCase):
             with patch("firebase_admin.messaging.send") as send:
                 self.assertEqual(send_push_notification(notification.pk), 0)
                 send.assert_not_called()
+
+
+class PushReportRoutingTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(
+            email="push-owner@example.com",
+            password="TestPass123!",
+            role=User.Role.CITIZEN,
+        )
+        self.follower = User.objects.create_user(
+            email="push-follower@example.com",
+            password="TestPass123!",
+            role=User.Role.CITIZEN,
+        )
+        self.worker = User.objects.create_user(
+            email="push-worker@example.com",
+            password="TestPass123!",
+            role=User.Role.WORKER,
+        )
+        category = Category.objects.create(name="Push Waste", slug="push-waste")
+        self.report = Report.objects.create(
+            citizen=self.owner,
+            category=category,
+            description="Push routing test",
+            location=Point(73.0479, 33.6844, srid=4326),
+            assigned_worker=self.worker,
+        )
+        ReportFollow.objects.create(report=self.report, user=self.follower)
+
+    def _send_data_for(self, user, suffix):
+        DeviceInstallation.objects.create(
+            user=user,
+            firebase_installation_id=f"fid-route-{suffix}",
+            fcm_registration_token=f"fcm-route-{suffix}",
+            platform=DeviceInstallation.Platform.ANDROID,
+        )
+        notification = Notification.objects.create(
+            user=user,
+            title="Report update",
+            message="Open this report.",
+            notification_type=Notification.Type.REPORT_STATUS,
+            report=self.report,
+        )
+        with patch("apps.notifications.services._firebase_app", return_value=object()):
+            with patch("firebase_admin.messaging.send", return_value="message-id") as send:
+                self.assertEqual(send_push_notification(notification.pk), 1)
+        return send.call_args.args[0].data
+
+    def test_owner_push_routes_to_private_report_detail(self):
+        data = self._send_data_for(self.owner, "owner")
+        self.assertEqual(data["report_id"], str(self.report.id))
+        self.assertEqual(data["report_route"], "OWNER_REPORT")
+
+    def test_follower_push_routes_to_community_report_detail(self):
+        data = self._send_data_for(self.follower, "follower")
+        self.assertEqual(data["report_id"], str(self.report.id))
+        self.assertEqual(data["report_route"], "COMMUNITY_REPORT")
+
+    def test_worker_push_routes_to_worker_job_detail(self):
+        data = self._send_data_for(self.worker, "worker")
+        self.assertEqual(data["report_id"], str(self.report.id))
+        self.assertEqual(data["report_route"], "WORKER_JOB")

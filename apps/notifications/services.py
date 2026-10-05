@@ -3,6 +3,8 @@ import logging
 from django.conf import settings
 from django.db import transaction
 
+from apps.accounts.models import User
+
 from .models import DeviceInstallation, Notification
 
 logger = logging.getLogger(__name__)
@@ -45,12 +47,28 @@ def _firebase_app():
             return None
 
 
+def _report_route_for(notification):
+    """Return the Flutter destination encoded into report-related push payloads."""
+    if not notification.report_id:
+        return None
+
+    if notification.user.role == User.Role.WORKER:
+        return "WORKER_JOB"
+
+    if notification.user.role == User.Role.CITIZEN:
+        if notification.report.citizen_id == notification.user_id:
+            return "OWNER_REPORT"
+        return "COMMUNITY_REPORT"
+
+    return None
+
+
 def send_push_notification(notification_id):
     app = _firebase_app()
     if app is None:
         return 0
 
-    notification = Notification.objects.select_related("report").filter(pk=notification_id).first()
+    notification = Notification.objects.select_related("report", "user").filter(pk=notification_id).first()
     if notification is None:
         return 0
 
@@ -69,6 +87,9 @@ def send_push_notification(notification_id):
     }
     if notification.report_id:
         data["report_id"] = str(notification.report_id)
+        report_route = _report_route_for(notification)
+        if report_route:
+            data["report_route"] = report_route
 
     sent = 0
     for installation in installations:
